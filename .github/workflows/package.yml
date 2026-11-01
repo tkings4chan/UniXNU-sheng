@@ -42,6 +42,19 @@ jobs:
           submodules: recursive
       - name: tools
         run: brew install dtc llvm lld mtools
+      - name: device fixups
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          apriori = Path('uefi-sheng/Platforms/Xiaomi/shengPkg/Include/APRIORI.inc')
+          text = apriori.read_text()
+          vendor = '  INF Binaries/sheng/MdeModulePkg/Universal/DevicePathDxe/DevicePathDxe.inf\n'
+          generic = '  INF MdeModulePkg/Universal/DevicePathDxe/DevicePathDxe.inf\n'
+          if vendor not in text:
+              raise SystemExit('the vendor DevicePathDxe entry is not where this fix expects it')
+          apriori.write_text(text.replace(vendor, generic))
+          print('APRIORI.inc: the generic DevicePathDxe replaces the vendor one')
+          PY
       - name: platform seed
         env:
           seed: ${{ secrets.UNIXNU_UNIQUE_CHIP_ID }}
