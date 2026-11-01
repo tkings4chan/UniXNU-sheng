@@ -40,7 +40,7 @@ jobs:
           repository: UniXNU/uefi-sheng
           path: uefi-sheng
       - name: tools
-        run: brew install dtc llvm
+        run: brew install dtc llvm lld
       - name: platform seed
         env:
           seed: ${{ secrets.UNIXNU_UNIQUE_CHIP_ID }}
