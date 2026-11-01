@@ -45,7 +45,9 @@ jobs:
       - name: device fixups
         run: |
           python3 - <<'PY'
+          import re
           from pathlib import Path
+
           apriori = Path('uefi-sheng/Platforms/Xiaomi/shengPkg/Include/APRIORI.inc')
           text = apriori.read_text()
           vendor = '  INF Binaries/sheng/MdeModulePkg/Universal/DevicePathDxe/DevicePathDxe.inf\n'
@@ -54,6 +56,21 @@ jobs:
               raise SystemExit('the vendor DevicePathDxe entry is not where this fix expects it')
           apriori.write_text(text.replace(vendor, generic))
           print('APRIORI.inc: the generic DevicePathDxe replaces the vendor one')
+
+          raw = Path('uefi-sheng/Platforms/Xiaomi/shengPkg/Include/RAW.inc')
+          text = raw.read_text()
+          block = re.compile(
+              r'(  FILE FREEFORM = A1E235DE-E825-4591-9623-C43175811826 \{.*?\n  \}\n)',
+              re.S)
+          match = block.search(text)
+          if match is None:
+              raise SystemExit('the SecParti raw file is not where this fix expects it')
+          if '!if $(SHENG_VENDOR_HW) == 1\n' + match.group(1) in text:
+              raise SystemExit('the SecParti raw file is already gated')
+          raw.write_text(text.replace(
+              match.group(1),
+              '!if $(SHENG_VENDOR_HW) == 1\n' + match.group(1) + '!endif\n'))
+          print('RAW.inc: the vendor SecParti raw file loads only with the vendor drivers')
           PY
       - name: platform seed
         env:
