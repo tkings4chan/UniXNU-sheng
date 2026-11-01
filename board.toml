@@ -170,3 +170,7 @@
 
 ["os_overrides"."ipados-26.5.2-23F84"]
 "remove" = ["payload.install", "payload.root_policies"]
+
+
+["os_overrides"."ipados-27.0.1-24A446"."kernel"."prelink"]
+"extra_args" = ["--allow-missing"]
