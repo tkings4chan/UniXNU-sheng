@@ -71,6 +71,12 @@ jobs:
             [ -f "/opt/homebrew/opt/llvm/bin/$t" ] || [ -f "/opt/homebrew/opt/lld/bin/$t" ] || { echo "missing tool: $t"; ok=0; }
           done
           [ "$ok" = 1 ]
+      - name: fetch Ath12kWifi sources
+        # The Wi-Fi userspace step builds wpa_supplicant before the kernel step, and
+        # prepare-supplicant.py runs fetch-sources.py --check: a clean checkout has no
+        # deps/, so the supplicant stops the build before its first object compiles.
+        run: |
+          python3 device/drivers/Ath12kWifi/tools/fetch-sources.py
       - name: repair Mesa patch headers
         # git apply requires "new file mode" beside --- /dev/null; turnip-frame-diagnostics.patch
         # omits it upstream, which fails the build before the first Mesa patch lands.
