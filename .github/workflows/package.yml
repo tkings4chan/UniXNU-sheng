@@ -75,7 +75,24 @@ jobs:
         # The Wi-Fi userspace step builds wpa_supplicant before the kernel step, and
         # prepare-supplicant.py runs fetch-sources.py --check: a clean checkout has no
         # deps/, so the supplicant stops the build before its first object compiles.
+        # fetch-sources.py adds the locked sparse paths in cone mode, which rejects the
+        # leading slash of source-lock.json ("specify directories rather than patterns"),
+        # so the clones are prepared in no-cone mode here and the script only verifies.
         run: |
+          python3 - <<'PY'
+          import json, pathlib, subprocess
+          root = pathlib.Path("device/drivers/Ath12kWifi")
+          lock = json.loads((root / "tools/source-lock.json").read_text())
+          for name in ("linux", "freebsd"):
+              directory = root / "deps" / name
+              source = lock[name]
+              if not directory.exists():
+                  subprocess.run(["git", "clone", "--depth", "1", "--branch", source["ref"],
+                                  source["url"], str(directory)], check=True)
+              subprocess.run(["git", "-C", str(directory), "sparse-checkout", "init", "--no-cone"], check=True)
+              subprocess.run(["git", "-C", str(directory), "sparse-checkout", "set", "--stdin"],
+                             input=chr(10).join(source["paths"]), text=True, check=True)
+          PY
           python3 device/drivers/Ath12kWifi/tools/fetch-sources.py
       - name: repair Mesa patch headers
         # git apply requires "new file mode" beside --- /dev/null; turnip-frame-diagnostics.patch
