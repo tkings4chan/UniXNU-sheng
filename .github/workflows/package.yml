@@ -71,6 +71,60 @@ jobs:
             [ -f "/opt/homebrew/opt/llvm/bin/$t" ] || [ -f "/opt/homebrew/opt/lld/bin/$t" ] || { echo "missing tool: $t"; ok=0; }
           done
           [ "$ok" = 1 ]
+      - name: fetch Ath12kWifi sources
+        # The Wi-Fi userspace step builds wpa_supplicant before the kernel step, and
+        # prepare-supplicant.py runs fetch-sources.py --check: a clean checkout has no
+        # deps/, so the supplicant stops the build before its first object compiles.
+        # fetch-sources.py adds the locked sparse paths in cone mode, which rejects the
+        # leading slash of source-lock.json ("specify directories rather than patterns"),
+        # so the clones are prepared in no-cone mode here and the script only verifies.
+        run: |
+          python3 - <<'PY'
+          import json, pathlib, subprocess
+          root = pathlib.Path("device/drivers/Ath12kWifi")
+          lock = json.loads((root / "tools/source-lock.json").read_text())
+          for name in ("linux", "freebsd"):
+              directory = root / "deps" / name
+              source = lock[name]
+              if not directory.exists():
+                  subprocess.run(["git", "clone", "--depth", "1", "--branch", source["ref"],
+                                  source["url"], str(directory)], check=True)
+              subprocess.run(["git", "-C", str(directory), "sparse-checkout", "init", "--no-cone"], check=True)
+              subprocess.run(["git", "-C", str(directory), "sparse-checkout", "set", "--stdin"],
+                             input=chr(10).join(source["paths"]), text=True, check=True)
+          PY
+          python3 device/drivers/Ath12kWifi/tools/fetch-sources.py
+      - name: repair Mesa patch headers
+        # git apply requires "new file mode" beside --- /dev/null; turnip-frame-diagnostics.patch
+        # omits it upstream, which fails the build before the first Mesa patch lands.
+        run: |
+          python3 - <<'PY'
+          import pathlib
+          fixed = 0
+          for path in sorted(pathlib.Path('UniXNU/patches').rglob('*.patch')):
+              lines = path.read_text().splitlines(keepends=True)
+              out, changed, i = [], False, 0
+              while i < len(lines):
+                  line = lines[i]
+                  out.append(line)
+                  if line.startswith('diff --git '):
+                      j, block = i + 1, []
+                      while j < len(lines) and not lines[j].startswith('@@') and not lines[j].startswith('diff --git '):
+                          block.append(lines[j])
+                          j += 1
+                      mode = any(b.startswith(('new file mode', 'deleted file mode', 'old mode', 'new mode')) for b in block)
+                      old = next((b[4:].strip() for b in block if b.startswith('--- ')), None)
+                      new = next((b[4:].strip() for b in block if b.startswith('+++ ')), None)
+                      if not mode and (old == '/dev/null' or new == '/dev/null'):
+                          out.append('new file mode 100644\n' if old == '/dev/null' else 'deleted file mode 100644\n')
+                          changed = True
+                  i += 1
+              if changed:
+                  path.write_text(''.join(out))
+                  fixed += 1
+                  print('repaired', path)
+          print('repaired', fixed, 'file(s)')
+          PY
       - name: platform seed
         env:
           seed: ${{ secrets.UNIXNU_UNIQUE_CHIP_ID }}
